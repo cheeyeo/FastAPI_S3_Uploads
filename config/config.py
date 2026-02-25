@@ -6,6 +6,3 @@ class Settings(BaseSettings):
     s3_profile: str
     s3_bucket: str
     model_config = SettingsConfigDict(env_file=".env")
-
-
-# settings = Settings()
