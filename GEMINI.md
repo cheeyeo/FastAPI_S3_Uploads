@@ -74,7 +74,12 @@ TODO: Add comprehensive backend testing instructions and commands.
 
 ## Development Conventions:
 
-*   **Code Style (Python)**: Adhere to standard Python best practices and conventions (e.g., PEP 8).
+*   **Code Style (Python)**: Adhere to standard Python best practices and conventions (e.g., PEP 8). Ruff is used for linting and formatting.
+*   **Pre-commit Hooks**: This project uses `pre-commit` to ensure code quality. To set up:
+    ```bash
+    pip install pre-commit
+    pre-commit install
+    ```
 *   **Code Style (React/TypeScript)**: Follow standard React and TypeScript conventions.
 *   **Configuration**: All sensitive or environment-specific configurations should be managed via environment variables and loaded through `pydantic-settings` (backend) or defined as constants (frontend, for API base URL).
 *   **Error Handling**: Use FastAPI's `HTTPException` for API-specific error responses on the backend. Implement client-side error handling in the React frontend to inform users of upload failures.
