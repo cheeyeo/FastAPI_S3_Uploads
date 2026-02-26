@@ -77,7 +77,7 @@ TODO: Add comprehensive backend testing instructions and commands.
 *   **Code Style (Python)**: Adhere to standard Python best practices and conventions (e.g., PEP 8). Ruff is used for linting and formatting.
 *   **Pre-commit Hooks**: This project uses `pre-commit` to ensure code quality. To set up:
     ```bash
-    pip install pre-commit
+    uv add pre-commit
     pre-commit install
     ```
 *   **Code Style (React/TypeScript)**: Follow standard React and TypeScript conventions.
