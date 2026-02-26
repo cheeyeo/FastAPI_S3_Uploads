@@ -4,6 +4,7 @@ import logging
 from functools import lru_cache
 from config.config import Settings
 from fastapi import FastAPI, UploadFile, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 import boto3
 from boto3.s3.transfer import TransferConfig
 from botocore.exceptions import ClientError
@@ -17,6 +18,15 @@ app = FastAPI(
     title="File uploads example",
     description="Example of file uploads in FastAPI",
     version="1.0.0",
+)
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
