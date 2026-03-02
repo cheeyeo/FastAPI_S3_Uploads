@@ -5,12 +5,15 @@ from functools import lru_cache
 import uuid
 import threading
 import sys
-from config.config import Settings
 from fastapi import FastAPI, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import boto3
 from boto3.s3.transfer import TransferConfig
 from botocore.exceptions import ClientError
+from bson import ObjectId
+from config.config import Settings
+from server.database import uploads, nonasync_uploads
+from server.models import UploadSchema, UpdateUploadSchema
 
 
 logging.basicConfig(level=logging.INFO)
@@ -97,17 +100,42 @@ async def upload_local_file(file: UploadFile):
     }
 
 
+# @app.websocket("/ws")
+# async def websocket_endpoint(websocket: WebSocket, filename: str):
+#     await websocket.accept()
+
+#     try:
+#         while True:
+#             await websocket.receive_text()
+#     except WebSocketDisconnect:
+#         CLIENTS.pop(filename)
+
+
 class ProgressPercentage:
-    def __init__(self, file: UploadFile):
+    def __init__(self, file: UploadFile, id: str):
         self._filename = file.filename
         self._size = float(file.size)
         self._seen_so_far = 0
         self._lock = threading.Lock()
+        self._id = id
 
     def __call__(self, bytes_amount):
         with self._lock:
+            print(f"ID: {self._id}")
             self._seen_so_far += bytes_amount
             percentage = (self._seen_so_far / self._size) * 100
+
+            # Below uses non-async mongo client as the callback is non async
+            collection_name = nonasync_uploads["uploads"]
+            collection_name.update_one(
+                {"_id": ObjectId(self._id)},
+                {
+                    "$set": UpdateUploadSchema(
+                        current=self._seen_so_far, percentage=percentage
+                    ).model_dump(exclude_unset=True)
+                },
+            )
+
             sys.stdout.write(
                 "\r%s  %s / %s  (%.2f%%)"
                 % (self._filename, self._seen_so_far, self._size, percentage)
@@ -127,6 +155,12 @@ async def upload_s3_streaming(file: UploadFile):
 
     filename = generate_safe_filename(file.filename)
 
+    # Add initial record to db
+    result = await uploads.insert_one(
+        UploadSchema(filename=file.filename, size=float(file.size)).model_dump()
+    )
+    upload_id = str(result.inserted_id)
+
     try:
         config = TransferConfig(
             multipart_chunksize=CHUNK_SIZE,
@@ -140,7 +174,7 @@ async def upload_s3_streaming(file: UploadFile):
             filename,
             ExtraArgs={"ContentType": file.content_type},
             Config=config,
-            Callback=ProgressPercentage(file),
+            Callback=ProgressPercentage(file, upload_id),
         )
     except ClientError as e:
         raise HTTPException(status_code=500, detail=f"S3 Upload failed: {e}")

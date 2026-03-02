@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import './App.css';
 
-const API_BASE_URL = 'http://127.0.0.1:8000'; // Make sure this matches your FastAPI server address
+const API_BASE_URL = 'http://localhost:8000'; // Make sure this matches your FastAPI server address
 
 function App() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -25,6 +25,11 @@ function App() {
 
     setLoading(true);
     setMessage('Uploading...');
+
+    // const ws = new WebSocket(`ws://localhost:8000/ws?filename=${selectedFile.name}`);
+    // ws.onmessage = (e) => {
+    //   console.log(e.data);
+    // };
 
     const formData = new FormData();
     formData.append('file', selectedFile);
