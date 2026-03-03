@@ -9,8 +9,8 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: example
     volumes:
       - mongodb_data:/data/db
-    networks:
-      - mongoCluster
+    # networks:
+    #   - mongoCluster
 
   mongo-express:
     image: mongo-express
@@ -22,8 +22,8 @@ services:
       ME_CONFIG_BASICAUTH_ENABLED: true
       ME_CONFIG_BASICAUTH_USERNAME: mongoexpressuser
       ME_CONFIG_BASICAUTH_PASSWORD: mongoexpresspass
-    networks:
-      - mongoCluster
+    # networks:
+    #   - mongoCluster
 
 networks:
   mongoCluster:

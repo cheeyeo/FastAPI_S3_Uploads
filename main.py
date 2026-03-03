@@ -4,15 +4,17 @@ import logging
 from functools import lru_cache
 import uuid
 import threading
-import sys
-from fastapi import FastAPI, UploadFile, HTTPException
+import json
+import asyncio
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, UploadFile, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import boto3
 from boto3.s3.transfer import TransferConfig
 from botocore.exceptions import ClientError
 from bson import ObjectId
 from config.config import Settings
-from server.database import uploads, nonasync_uploads
+from server.database import nonasync_uploads, async_uploads
 from server.models import UploadSchema, UpdateUploadSchema
 
 
@@ -20,10 +22,58 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+CLIENTS = set()
+
+
+async def broadcast(data):
+    text = json.dumps(data, default=str)
+    for client in CLIENTS.copy():
+        try:
+            await client.send_text(text)
+        except Exception:
+            CLIENTS.remove(client)
+
+
+async def watch_uploads_changes():
+    pipeline = [
+        {
+            "$match": {
+                "operationType": {"$in": ["insert", "update", "replace", "delete"]}
+            }
+        }
+    ]
+    async with await async_uploads.watch(
+        pipeline, full_document="updateLookup", full_document_before_change="required"
+    ) as stream:
+        async for change in stream:
+            doc_id = change["documentKey"]["_id"]
+            before = change.get("fullDocumentBeforeChange", {})
+            after = change.get("fullDocument", {})
+
+            logger.info(f"BEFORE: {before} AFTER: {after}")
+
+            await broadcast(
+                {
+                    "event": change["operationType"],
+                    "document_id": str(doc_id),
+                    "before": before,
+                    "after": after,
+                }
+            )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(watch_uploads_changes())
+    yield
+    task.cancel()
+
+
 app = FastAPI(
     title="File uploads example",
     description="Example of file uploads in FastAPI",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 
@@ -82,6 +132,18 @@ def generate_safe_filename(original: str) -> str:
     return f"{unique_prefix}_{original}"
 
 
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    CLIENTS.add(websocket)
+
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        CLIENTS.remove(websocket)
+
+
 @app.post("/upload/local")
 async def upload_local_file(file: UploadFile):
     if file.filename == "":
@@ -100,17 +162,6 @@ async def upload_local_file(file: UploadFile):
     }
 
 
-# @app.websocket("/ws")
-# async def websocket_endpoint(websocket: WebSocket, filename: str):
-#     await websocket.accept()
-
-#     try:
-#         while True:
-#             await websocket.receive_text()
-#     except WebSocketDisconnect:
-#         CLIENTS.pop(filename)
-
-
 class ProgressPercentage:
     def __init__(self, file: UploadFile, id: str):
         self._filename = file.filename
@@ -126,8 +177,7 @@ class ProgressPercentage:
             percentage = (self._seen_so_far / self._size) * 100
 
             # Below uses non-async mongo client as the callback is non async
-            collection_name = nonasync_uploads["uploads"]
-            collection_name.update_one(
+            nonasync_uploads.update_one(
                 {"_id": ObjectId(self._id)},
                 {
                     "$set": UpdateUploadSchema(
@@ -136,11 +186,11 @@ class ProgressPercentage:
                 },
             )
 
-            sys.stdout.write(
-                "\r%s  %s / %s  (%.2f%%)"
-                % (self._filename, self._seen_so_far, self._size, percentage)
-            )
-            sys.stdout.flush()
+            # sys.stdout.write(
+            #     "\r%s  %s / %s  (%.2f%%)"
+            #     % (self._filename, self._seen_so_far, self._size, percentage)
+            # )
+            # sys.stdout.flush()
 
 
 @app.post("/upload/s3")
@@ -156,7 +206,7 @@ async def upload_s3_streaming(file: UploadFile):
     filename = generate_safe_filename(file.filename)
 
     # Add initial record to db
-    result = await uploads.insert_one(
+    result = await async_uploads.insert_one(
         UploadSchema(filename=file.filename, size=float(file.size)).model_dump()
     )
     upload_id = str(result.inserted_id)

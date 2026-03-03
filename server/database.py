@@ -1,27 +1,35 @@
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import MongoClient
-from bson import ObjectId
+from pymongo import AsyncMongoClient
 
 
-DATABASE_URL = "mongodb://root:example@localhost:27017/"
+# DATABASE_URL = "mongodb://root:example@localhost:27017/"
+DATABASE_URL = "mongodb://sa:Password123@localhost:27017,localhost:27018,localhost:27019/fastapiuploads?authSource=admin"
 
 client = AsyncIOMotorClient(DATABASE_URL)
 database = client.uploads
 uploads = database.get_collection("uploads")
 
 nonasync_client = MongoClient(DATABASE_URL)
-nonasync_uploads = nonasync_client["uploads"]
+database = nonasync_client.get_database("fastapiuploads")
+nonasync_uploads = database.get_collection("uploads")
+
+async_client = AsyncMongoClient(DATABASE_URL)
+async_database = async_client.get_database("fastapiuploads")
+async_uploads = async_database.get_collection("uploads")
 
 
 if __name__ == "__main__":
-    from models import UpdateUploadSchema
+    from models import UploadSchema
+    from typing import TypedDict
 
-    id = "69a46b78fde0950f86e6104e"
+    class Restaurant(TypedDict):
+        name: str
 
-    collection_name = nonasync_uploads["uploads"]
+    print(f"DATABASE: {database}")
 
-    res = collection_name.update_one(
-        {"_id": ObjectId(id)},
-        {"$set": UpdateUploadSchema(current=100, percentage=100.0).model_dump()},
+    # nonasync_uploads.insert_one(Restaurant(name="Mongo's Burgers 222"))
+
+    nonasync_uploads.insert_one(
+        UploadSchema(filename="testfile", size=100.0).model_dump()
     )
-    print(res)

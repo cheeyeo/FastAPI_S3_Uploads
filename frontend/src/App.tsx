@@ -3,6 +3,17 @@ import './App.css';
 
 const API_BASE_URL = 'http://localhost:8000'; // Make sure this matches your FastAPI server address
 
+const ws = new WebSocket(`ws://localhost:8000/ws`);
+    ws.addEventListener("message", (e) => {
+      const message = JSON.parse(e.data);
+      console.log(message);
+    });
+
+    ws.addEventListener("open", () => {
+      console.log("CONNECTED");
+    });
+
+
 function App() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [message, setMessage] = useState<string>('');
@@ -25,11 +36,6 @@ function App() {
 
     setLoading(true);
     setMessage('Uploading...');
-
-    // const ws = new WebSocket(`ws://localhost:8000/ws?filename=${selectedFile.name}`);
-    // ws.onmessage = (e) => {
-    //   console.log(e.data);
-    // };
 
     const formData = new FormData();
     formData.append('file', selectedFile);

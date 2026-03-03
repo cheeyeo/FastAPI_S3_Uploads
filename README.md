@@ -51,4 +51,22 @@ https://stackoverflow.com/questions/61486024/mongo-container-with-a-replica-set-
 https://stackoverflow.com/questions/76013265/how-to-do-a-mongodb-6-single-node-replicaset-with-docker-compose
 
 
+( NOT WORKING )
+https://dev.to/denisakp/setting-up-a-3-node-mongodb-replica-set-cluster-with-docker-compose-50kn
+
+
+( WORKS BUT ONLY IN SCRIPT WITHOUT AUTH )
 https://www.mongodb.com/resources/products/compatibilities/deploying-a-mongodb-cluster-with-docker
+
+( THIS IS THE ONLY ONE THAT WORKS )
+https://medium.com/@ravikushwaha18.rk/setting-up-a-mongodb-replica-set-with-docker-compose-62ece5c295a1
+
+
+NEED TO UPDATE THE /etc/hosts file else the client code won't work....
+
+
+https://anthonysimmon.com/the-only-local-mongodb-replica-set-with-docker-compose-guide-youll-ever-need/
+
+
+React typescript progress bar
+https://dev.to/simonnystrom/building-a-progress-bar-222n
