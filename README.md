@@ -70,3 +70,11 @@ https://anthonysimmon.com/the-only-local-mongodb-replica-set-with-docker-compose
 
 React typescript progress bar
 https://dev.to/simonnystrom/building-a-progress-bar-222n
+
+
+
+#### TODO:
+
+Issue is the mongodb changeset works but the updates to the UI via WS happens only after the file is uploaded
+
+need the progresscallback to use async mongodb client which means we need to use an async S3 client....
