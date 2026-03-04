@@ -38,6 +38,8 @@ body {
   gap: 1em;
   align-items: center;
   margin-top: 2em;
+  min-width: 400px;
+  max-width: 600px;
 }
 
 .buttons {

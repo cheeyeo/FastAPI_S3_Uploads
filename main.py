@@ -1,7 +1,7 @@
 import shutil
 from pathlib import Path
 import logging
-from functools import lru_cache
+from functools import lru_cache, partial
 import uuid
 import threading
 import json
@@ -50,7 +50,7 @@ async def watch_uploads_changes():
             before = change.get("fullDocumentBeforeChange", {})
             after = change.get("fullDocument", {})
 
-            logger.info(f"BEFORE: {before} AFTER: {after}")
+            # logger.info(f"BEFORE: {before} AFTER: {after}")
 
             await broadcast(
                 {
@@ -172,7 +172,6 @@ class ProgressPercentage:
 
     def __call__(self, bytes_amount):
         with self._lock:
-            print(f"ID: {self._id}")
             self._seen_so_far += bytes_amount
             percentage = (self._seen_so_far / self._size) * 100
 
@@ -185,12 +184,6 @@ class ProgressPercentage:
                     ).model_dump(exclude_unset=True)
                 },
             )
-
-            # sys.stdout.write(
-            #     "\r%s  %s / %s  (%.2f%%)"
-            #     % (self._filename, self._seen_so_far, self._size, percentage)
-            # )
-            # sys.stdout.flush()
 
 
 @app.post("/upload/s3")
@@ -217,15 +210,20 @@ async def upload_s3_streaming(file: UploadFile):
             multipart_threshold=5 * GB,
         )
 
-        # ADD CALLBACK TO TRACK PROGRESS
-        S3_CLIENT.upload_fileobj(
-            file.file,
-            S3_BUCKET,
-            filename,
+        loop = asyncio.get_event_loop()
+
+        upload_partial = partial(
+            S3_CLIENT.upload_fileobj,
+            Fileobj=file.file,
+            Bucket=S3_BUCKET,
+            Key=filename,
             ExtraArgs={"ContentType": file.content_type},
             Config=config,
             Callback=ProgressPercentage(file, upload_id),
         )
+
+        await loop.run_in_executor(None, upload_partial)
+
     except ClientError as e:
         raise HTTPException(status_code=500, detail=f"S3 Upload failed: {e}")
 
@@ -235,6 +233,7 @@ async def upload_s3_streaming(file: UploadFile):
 
     return {
         "message": "File uploaded to S3",
+        "upload_id": upload_id,
         "original_filename": file.filename,
         "s3_key": file.filename,
         "s3_url": file_url,
