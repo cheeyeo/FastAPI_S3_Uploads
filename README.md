@@ -1,6 +1,8 @@
 ### FastAPI File Uploads
 
-Learning how to use FastAPI for file uploads to S3
+Learning how to use FastAPI for file uploads to S3 which includes a ReactUI that shows realtime updates via websocket from the API
+
+The updates are provided via MongoDB changesets and can run locally in docker containers.
 
 
 
@@ -49,8 +51,10 @@ https://anthonysimmon.com/the-only-local-mongodb-replica-set-with-docker-compose
 
 
 ### TODO
-* Redo validator into separate module using pydantic basemodel?
+* Redo validator into separate module using pydantic basemodel
 * Create and use pydantic response model
+* Fix the compose22.yml to add back mongo-express
+* Dockerzie the application
 * Add / use celery for the upload progress ?
     https://celery.school/celery-progress-bars-with-fastapi-htmx
     https://github.com/bstiel/celery-task-progress-bar
