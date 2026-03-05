@@ -25,7 +25,7 @@ function App() {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        // console.log(data)
+        // console.log(data);
         
         // 1. If we haven't identified our upload_id yet, look for the 'insert' event
         // matching the filename and size of the file we just started uploading.

@@ -52,7 +52,6 @@ https://anthonysimmon.com/the-only-local-mongodb-replica-set-with-docker-compose
 
 ### TODO
 * Redo validator into separate module using pydantic basemodel
-* Create and use pydantic response model
 * Fix the compose22.yml to add back mongo-express
 * Dockerzie the application
 * Add / use celery for the upload progress ?

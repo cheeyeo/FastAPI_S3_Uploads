@@ -7,7 +7,14 @@ import threading
 import json
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, UploadFile, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI,
+    UploadFile,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+    Depends,
+)
 from fastapi.middleware.cors import CORSMiddleware
 import boto3
 from boto3.s3.transfer import TransferConfig
@@ -15,7 +22,8 @@ from botocore.exceptions import ClientError
 from bson import ObjectId
 from config.config import Settings
 from server.database import nonasync_uploads, async_uploads
-from server.models import UploadSchema, UpdateUploadSchema
+from server.models import UploadSchema, UpdateUploadSchema, UploadResponse
+from server.validator import FileValidator
 
 
 logging.basicConfig(level=logging.INFO)
@@ -100,31 +108,6 @@ S3_PROFILE = get_settings().s3_profile
 S3_BUCKET = get_settings().s3_bucket
 SESSION = boto3.Session(region_name=S3_REGION, profile_name=S3_PROFILE)
 S3_CLIENT = SESSION.client("s3")
-# Magic number signatures for common file types
-MAGIC_NUMBERS = {
-    "image/jpeg": [b"\xff\xd8\xff"],
-    "image/png": [b"\x89PNG\r\n\x1a\n"],
-    "image/gif": [b"GIF87a", b"GIF89a"],
-    "application/pdf": [b"%PDF"],
-}
-
-
-async def validate_magic_number(file: UploadFile, expected_type: str) -> bool:
-    """
-    Verify file content matches expected type using magic numbers.
-    More secure than relying on Content-Type header alone.
-    """
-
-    header = await file.read(8)
-    await file.seek(0)
-
-    signatures = MAGIC_NUMBERS.get(expected_type, [])
-
-    for sig in signatures:
-        if header.startswith(sig):
-            return True
-
-    return False
 
 
 def generate_safe_filename(original: str) -> str:
@@ -186,23 +169,8 @@ class ProgressPercentage:
             )
 
 
-@app.post("/upload/s3")
-async def upload_s3_streaming(file: UploadFile):
-    # uses the boto3 built-in multipart uploads
-    # https://docs.aws.amazon.com/boto3/latest/guide/s3.html
-
-    # TODO: Redo validator below as dedicated object
-    # res = await validate_magic_number(file, file.content_type)
-    # if not res:
-    #     raise HTTPException(status_code=500, detail="File validation failed")
-
+def s3_upload(file: UploadFile, upload_id: str) -> UploadResponse:
     filename = generate_safe_filename(file.filename)
-
-    # Add initial record to db
-    result = await async_uploads.insert_one(
-        UploadSchema(filename=file.filename, size=float(file.size)).model_dump()
-    )
-    upload_id = str(result.inserted_id)
 
     try:
         config = TransferConfig(
@@ -210,10 +178,7 @@ async def upload_s3_streaming(file: UploadFile):
             multipart_threshold=5 * GB,
         )
 
-        loop = asyncio.get_event_loop()
-
-        upload_partial = partial(
-            S3_CLIENT.upload_fileobj,
+        S3_CLIENT.upload_fileobj(
             Fileobj=file.file,
             Bucket=S3_BUCKET,
             Key=filename,
@@ -221,21 +186,44 @@ async def upload_s3_streaming(file: UploadFile):
             Config=config,
             Callback=ProgressPercentage(file, upload_id),
         )
-
-        await loop.run_in_executor(None, upload_partial)
-
     except ClientError as e:
-        raise HTTPException(status_code=500, detail=f"S3 Upload failed: {e}")
+        raise e
 
+    # Generate presigned url that's valid for an hour
     file_url = S3_CLIENT.generate_presigned_url(
         "get_object", Params={"Bucket": S3_BUCKET, "Key": filename}, ExpiresIn=3600
     )
 
-    return {
-        "message": "File uploaded to S3",
-        "upload_id": upload_id,
-        "original_filename": file.filename,
-        "s3_key": file.filename,
-        "s3_url": file_url,
-        "size": file.size,
-    }
+    return UploadResponse(
+        message="File uploaded to S3",
+        original_filename=file.filename,
+        s3_key=file.filename,
+        s3_url=file_url,
+        size=file.size,
+    )
+
+
+validate_file = FileValidator(max_size=5 * GB, allowed_extensions={".appimage"})
+
+
+@app.post("/upload/s3", response_model=UploadResponse)
+async def upload_s3_streaming(file: UploadFile = Depends(validate_file)):
+    # uses the boto3 built-in multipart uploads
+    # https://docs.aws.amazon.com/boto3/latest/guide/s3.html
+
+    # Add initial record to db
+    result = await async_uploads.insert_one(
+        UploadSchema(filename=file.filename, size=float(file.size)).model_dump()
+    )
+    upload_id = str(result.inserted_id)
+
+    loop = asyncio.get_event_loop()
+
+    upload_partial = partial(s3_upload, file=file, upload_id=upload_id)
+
+    try:
+        upload_resp = await loop.run_in_executor(None, upload_partial)
+    except ClientError as e:
+        raise HTTPException(status_code=500, detail=f"S3 Upload failed: {e}")
+
+    return upload_resp

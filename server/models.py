@@ -13,3 +13,11 @@ class UploadSchema(BaseModel):
 class UpdateUploadSchema(BaseModel):
     current: int
     percentage: float
+
+
+class UploadResponse(BaseModel):
+    message: str = Field(...)
+    original_filename: str = Field(...)
+    s3_key: str = Field(...)
+    s3_url: str = Field(...)
+    size: int = Field(default=0)
