@@ -120,13 +120,15 @@ def generate_safe_filename(original: str) -> str:
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
     CLIENTS.add(websocket)
+
+    await websocket.accept()
 
     try:
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
+        logger.info("WS connection closed")
         CLIENTS.remove(websocket)
 
 
