@@ -41,6 +41,23 @@ https://medium.com/@ravikushwaha18.rk/setting-up-a-mongodb-replica-set-with-dock
 https://anthonysimmon.com/the-only-local-mongodb-replica-set-with-docker-compose-guide-youll-ever-need/
 
 
+#### Generate large file for testing uploads
+use dd on ubuntu
+
+```
+#kilobytes
+dd if=/dev/zero of=filename bs=1 count=0 seek=200K
+
+#megabytes
+dd if=/dev/zero of=filename bs=1 count=0 seek=200M
+
+#gigabytes
+dd if=/dev/zero of=filename bs=1 count=0 seek=200G
+
+#terabytes
+dd if=/dev/zero of=filename bs=1 count=0 seek=200T
+
+```
 
 #### ASYNC
 

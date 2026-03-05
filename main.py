@@ -102,6 +102,9 @@ def get_settings():
 CHUNK_SIZE = 1024 * 1024  # 1 MB
 GB = 1024**3
 MAX_FILE_SIZE = 50 * CHUNK_SIZE
+# MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", 50 * 1024 * 1024))  # 50MB
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".pdf", ".doc", ".docx"}
+ALLOWED_CONTENT_TYPES = {"application/x-executable", "application/octet-stream"}
 UPLOAD_DIR = Path(get_settings().upload_dir)
 S3_REGION = get_settings().s3_region
 S3_PROFILE = get_settings().s3_profile
@@ -203,7 +206,11 @@ def s3_upload(file: UploadFile, upload_id: str) -> UploadResponse:
     )
 
 
-validate_file = FileValidator(max_size=5 * GB, allowed_extensions={".appimage"})
+validate_file = FileValidator(
+    max_size=5 * GB,
+    allowed_extensions={".appimage", ".file"},
+    allowed_content_types=ALLOWED_CONTENT_TYPES,
+)
 
 
 @app.post("/upload/s3", response_model=UploadResponse)
@@ -217,7 +224,7 @@ async def upload_s3_streaming(file: UploadFile = Depends(validate_file)):
     )
     upload_id = str(result.inserted_id)
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     upload_partial = partial(s3_upload, file=file, upload_id=upload_id)
 
