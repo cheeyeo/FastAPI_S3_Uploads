@@ -15,6 +15,8 @@ The updates are provided via MongoDB changesets and can run locally in docker co
 
 * https://betterstack.com/community/guides/scaling-python/uploading-files-using-fastapi/
 
+* https://python.plainenglish.io/handling-file-uploads-in-fastapi-from-basics-to-s3-integration-fc7e64f87d65
+
 * https://docs.aws.amazon.com/boto3/latest/_modules/boto3/s3/transfer.html
 
 ( upload larget files using boto3 s3 transferconfig )
@@ -68,9 +70,19 @@ dd if=/dev/zero of=filename bs=1 count=0 seek=200T
 
 
 ### TODO
-* Redo validator into separate module using pydantic basemodel
-* Fix the compose22.yml to add back mongo-express
+* Fix mongodb init scripts not loading to create initial database?
+
+  If the /data/db volume already exists the init scripts won't run
+
+  Also need to mount the directory the script is in and not the script itself..
+
+* Multi upload with separate progress bars for each
+
+* CRUD for all uploads
+
+
 * Dockerzie the application
+
 * Add / use celery for the upload progress ?
     https://celery.school/celery-progress-bars-with-fastapi-htmx
     https://github.com/bstiel/celery-task-progress-bar

@@ -236,3 +236,45 @@ async def upload_s3_streaming(file: UploadFile = Depends(validate_file)):
         raise HTTPException(status_code=500, detail=f"S3 Upload failed: {e}")
 
     return upload_resp
+
+
+@app.post("/upload/presigned-url")
+async def get_presigned_url(filename: str, content_type: str, size: str):
+    """
+    Generates presigned url for large file uploads to S3
+
+    * Get presigned url
+    * PUT file directly to presigned url
+    * Notify server upload is complete
+    """
+
+    # Add initial record to db
+    result = await async_uploads.insert_one(
+        UploadSchema(filename=filename, size=float(size)).model_dump()
+    )
+    upload_id = str(result.inserted_id)
+
+    s3_filename = generate_safe_filename(filename)
+
+    try:
+        presigned_post = S3_CLIENT.generate_presigned_post(
+            Bucket=S3_BUCKET,
+            Key=s3_filename,
+            Fields={"Content-Type": content_type},
+            Conditions=[
+                {"Content-Type": content_type},
+                ["content_length-range", 1, 100 * 1024 * 1024],
+            ],
+            ExpiresIn=3600,
+        )
+
+        return {
+            "upload_id": upload_id,
+            "url": presigned_post["url"],
+            "fields": presigned_post["fields"],
+            "key": s3_filename,
+        }
+    except ClientError as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to generate presigned URL: {e}"
+        )

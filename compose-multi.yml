@@ -20,12 +20,12 @@ services:
         - 'mongo1data:/data/db'
         - 'mongo1config:/data/configdb'
         - 'sharedconfig:/data'
-        # - ./scripts/docker/mongo:/docker-entrypoint-initdb.d
+        - ./scripts/docker/mongo:/docker-entrypoint-initdb.d
     healthcheck:
       test: mongosh
         -u $${MONGO_INITDB_ROOT_USERNAME}
         -p $${MONGO_INITDB_ROOT_PASSWORD}
-        --eval "try { rs.status() } catch (err) { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo1:27017',priority:2},{_id:1,host:'mongo2:27017',priority:1},{_id:2,host:'mongo3:27017',priority:1}]});db = db.getSiblingDB('fastapiuploads');db.createCollection('uploads', {changeStreamPreAndPostImages:{enabled:true}});}" | mongosh --port 27017 --quiet
+        --eval "try { rs.status() } catch (err) { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo1:27017',priority:2},{_id:1,host:'mongo2:27017',priority:1},{_id:2,host:'mongo3:27017',priority:1}]});}" | mongosh --port 27017 --quiet
       interval: 5s
       timeout: 30s
       start_period: 0s
@@ -89,4 +89,3 @@ volumes:
 
 networks:
   mynetwork:
-    # driver: bridge
