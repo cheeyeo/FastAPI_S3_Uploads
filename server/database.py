@@ -1,14 +1,12 @@
-from motor.motor_asyncio import AsyncIOMotorClient
+from server.config import get_settings
 from pymongo import MongoClient
 from pymongo import AsyncMongoClient
 
 
-# DATABASE_URL = "mongodb://root:example@localhost:27017/"
-DATABASE_URL = "mongodb://sa:Password123@localhost:27017,localhost:27018,localhost:27019/fastapiuploads?authSource=admin"
-
-client = AsyncIOMotorClient(DATABASE_URL)
-database = client.uploads
-uploads = database.get_collection("uploads")
+# Cannot contain IPs but only hostname so need to check /etc/hosts for mapping of mongodb container IP to hostname else it will fail name resolution
+# Connect to Root:
+# mongodb://sa:Password123@mongo1:27017,mongo2:27017,mongo3:27017/?authSource=admin
+DATABASE_URL = f"mongodb://{get_settings().mongo_db_user}:{get_settings().mongo_db_password}@mongo1:27017,mongo2:27017,mongo3:27017/fastapiuploads"
 
 nonasync_client = MongoClient(DATABASE_URL)
 database = nonasync_client.get_database("fastapiuploads")
@@ -28,7 +26,7 @@ if __name__ == "__main__":
 
     print(f"DATABASE: {database}")
 
-    # nonasync_uploads.insert_one(Restaurant(name="Mongo's Burgers 222"))
+    nonasync_uploads.insert_one(Restaurant(name="Mongo's Burgers 222"))
 
     nonasync_uploads.insert_one(
         UploadSchema(filename="testfile", size=100.0).model_dump()

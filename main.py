@@ -1,7 +1,7 @@
 import shutil
 from pathlib import Path
 import logging
-from functools import lru_cache, partial
+from functools import partial
 import uuid
 import threading
 import json
@@ -20,7 +20,7 @@ import boto3
 from boto3.s3.transfer import TransferConfig
 from botocore.exceptions import ClientError
 from bson import ObjectId
-from config.config import Settings
+from server.config import get_settings
 from server.database import nonasync_uploads, async_uploads
 from server.models import UploadSchema, UpdateUploadSchema, UploadResponse
 from server.validator import FileValidator
@@ -92,11 +92,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@lru_cache
-def get_settings():
-    return Settings()
 
 
 CHUNK_SIZE = 1024 * 1024  # 1 MB

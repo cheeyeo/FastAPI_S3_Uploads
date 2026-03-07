@@ -1,5 +1,6 @@
 services:  
   mongo-1:
+    env_file: .env
     container_name: 'mongo1'
     entrypoint: >
       /bin/bash -c '
@@ -11,11 +12,11 @@ services:
     ports:
       - 27017:27017
     environment:
-      - MONGO_INITDB_ROOT_USERNAME=sa
-      - MONGO_INITDB_ROOT_PASSWORD=Password123
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_DB_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_DB_ROOT_PASSWORD}
       - MONGO_INITDB_DATABASE=fastapiuploads
-      - MONGO_USER=bar
-      - MONGO_PASSWORD=baz
+      - MONGO_USER=${MONGO_DB_USER}
+      - MONGO_PASSWORD=${MONGO_DB_PASSWORD}
     volumes:
         - 'mongo1data:/data/db'
         - 'mongo1config:/data/configdb'
@@ -66,13 +67,14 @@ services:
 
   mongo-express:
     image: mongo-express
+    env_file: .env
     restart: always
     ports:
       - 8081:8081
     networks: 
       - "mynetwork"
     environment:
-      ME_CONFIG_MONGODB_URL: mongodb://sa:Password123@mongo1:27017,mongo2:27017/?authSource=admin
+      ME_CONFIG_MONGODB_URL: mongodb://${MONGO_DB_ROOT_USERNAME}:${MONGO_DB_ROOT_PASSWORD}@mongo1:27017,mongo2:27017,mongo3:27017/?authSource=admin
       ME_CONFIG_BASICAUTH_ENABLED: true
       ME_CONFIG_BASICAUTH_USERNAME: mongoexpressuser
       ME_CONFIG_BASICAUTH_PASSWORD: mongoexpresspass
