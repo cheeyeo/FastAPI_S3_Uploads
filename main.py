@@ -14,6 +14,7 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
     Depends,
+    BackgroundTasks,
 )
 from fastapi.middleware.cors import CORSMiddleware
 import boto3
@@ -22,7 +23,12 @@ from botocore.exceptions import ClientError
 from bson import ObjectId
 from server.config import get_settings
 from server.database import nonasync_uploads, async_uploads
-from server.models import UploadSchema, UpdateUploadSchema, UploadResponse
+from server.models import (
+    UploadSchema,
+    UpdateUploadSchema,
+    UploadResponse,
+    S3UploadResponse,
+)
 from server.validator import FileValidator
 
 
@@ -31,6 +37,23 @@ logger = logging.getLogger(__name__)
 
 
 CLIENTS = set()
+CHUNK_SIZE = 1024 * 1024  # 1 MB
+GB = 1024**3
+MAX_FILE_SIZE = 50 * CHUNK_SIZE
+# MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", 50 * 1024 * 1024))  # 50MB
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".pdf", ".doc", ".docx"}
+ALLOWED_CONTENT_TYPES = {"application/x-executable", "application/octet-stream"}
+UPLOAD_DIR = Path(get_settings().upload_dir)
+S3_REGION = get_settings().s3_region
+S3_PROFILE = get_settings().s3_profile
+S3_BUCKET = get_settings().s3_bucket
+SESSION = boto3.Session(region_name=S3_REGION, profile_name=S3_PROFILE)
+S3_CLIENT = SESSION.client("s3")
+
+
+def generate_safe_filename(original: str) -> str:
+    unique_prefix = str(uuid.uuid4())[:8]
+    return f"{unique_prefix}_{original}"
 
 
 async def broadcast(data):
@@ -94,23 +117,11 @@ app.add_middleware(
 )
 
 
-CHUNK_SIZE = 1024 * 1024  # 1 MB
-GB = 1024**3
-MAX_FILE_SIZE = 50 * CHUNK_SIZE
-# MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", 50 * 1024 * 1024))  # 50MB
-ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".pdf", ".doc", ".docx"}
-ALLOWED_CONTENT_TYPES = {"application/x-executable", "application/octet-stream"}
-UPLOAD_DIR = Path(get_settings().upload_dir)
-S3_REGION = get_settings().s3_region
-S3_PROFILE = get_settings().s3_profile
-S3_BUCKET = get_settings().s3_bucket
-SESSION = boto3.Session(region_name=S3_REGION, profile_name=S3_PROFILE)
-S3_CLIENT = SESSION.client("s3")
-
-
-def generate_safe_filename(original: str) -> str:
-    unique_prefix = str(uuid.uuid4())[:8]
-    return f"{unique_prefix}_{original}"
+validate_file = FileValidator(
+    max_size=5 * GB,
+    allowed_extensions={".appimage", ".file", ".jpg"},
+    allowed_content_types=ALLOWED_CONTENT_TYPES,
+)
 
 
 @app.websocket("/ws")
@@ -169,7 +180,7 @@ class ProgressPercentage:
             )
 
 
-def s3_upload(file: UploadFile, upload_id: str) -> UploadResponse:
+def s3_upload(file: UploadFile, upload_id: str) -> S3UploadResponse:
     filename = generate_safe_filename(file.filename)
 
     try:
@@ -189,29 +200,20 @@ def s3_upload(file: UploadFile, upload_id: str) -> UploadResponse:
     except ClientError as e:
         raise e
 
-    # Generate presigned url that's valid for an hour
     file_url = S3_CLIENT.generate_presigned_url(
         "get_object", Params={"Bucket": S3_BUCKET, "Key": filename}, ExpiresIn=3600
     )
 
-    return UploadResponse(
-        message="File uploaded to S3",
-        original_filename=file.filename,
-        s3_key=file.filename,
-        s3_url=file_url,
-        size=file.size,
+    # Update record with s3 url
+    nonasync_uploads.update_one(
+        {"_id": ObjectId(upload_id)}, {"$set": {"s3_url": file_url, "s3_key": filename}}
     )
 
-
-validate_file = FileValidator(
-    max_size=5 * GB,
-    allowed_extensions={".appimage", ".file"},
-    allowed_content_types=ALLOWED_CONTENT_TYPES,
-)
+    return S3UploadResponse(s3_url=file_url, s3_key=filename)
 
 
 @app.post("/upload/s3", response_model=UploadResponse)
-async def upload_s3_streaming(file: UploadFile = Depends(validate_file)):
+async def upload_s3(file: UploadFile = Depends(validate_file)):
     # uses the boto3 built-in multipart uploads
     # https://docs.aws.amazon.com/boto3/latest/guide/s3.html
 
@@ -221,16 +223,41 @@ async def upload_s3_streaming(file: UploadFile = Depends(validate_file)):
     )
     upload_id = str(result.inserted_id)
 
-    loop = asyncio.get_running_loop()
-
     upload_partial = partial(s3_upload, file=file, upload_id=upload_id)
 
     try:
-        upload_resp = await loop.run_in_executor(None, upload_partial)
+        s3_upload_resp = await asyncio.to_thread(upload_partial)
+        upload_resp = UploadResponse(
+            message="File uploaded to S3",
+            original_filename=file.filename,
+            s3_key=s3_upload_resp.s3_key,
+            s3_url=s3_upload_resp.s3_url,
+            size=file.size,
+        )
     except ClientError as e:
         raise HTTPException(status_code=500, detail=f"S3 Upload failed: {e}")
 
     return upload_resp
+
+
+@app.post("/upload/background", response_model=UploadSchema)
+async def upload_s3_background(
+    background_tasks: BackgroundTasks, file: UploadFile = Depends(validate_file)
+):
+    # Add initial record to db
+    result = await async_uploads.insert_one(
+        UploadSchema(filename=file.filename, size=float(file.size)).model_dump()
+    )
+
+    upload_id = str(result.inserted_id)
+    upload_partial = partial(s3_upload, file=file, upload_id=upload_id)
+
+    #  Add task to background
+    background_tasks.add_task(upload_partial)
+
+    new_upload = await async_uploads.find_one({"_id": result.inserted_id})
+
+    return new_upload
 
 
 @app.post("/upload/presigned-url")
