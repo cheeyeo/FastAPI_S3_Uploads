@@ -16,6 +16,7 @@ class UploadSchema(BaseModel):
     s3_url: Optional[str] = None
     s3_key: Optional[str] = None
     created_at: datetime = datetime.now()
+    updated_at: datetime = datetime.now()
     model_config = ConfigDict(
         populate_by_name=True,
         arbitrary_types_allowed=True,
@@ -25,6 +26,7 @@ class UploadSchema(BaseModel):
 class UpdateUploadSchema(BaseModel):
     current: int
     percentage: float
+    updated_at: datetime
 
 
 class UploadResponse(BaseModel):

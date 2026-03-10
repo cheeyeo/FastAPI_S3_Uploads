@@ -29,6 +29,13 @@ The updates are provided via MongoDB changesets and can run locally in docker co
 docker exec -it fastapi_file_upload-mongo-1 mongosh -u root -p example
 ```
 
+On mongodb init scripts not loading to create initial database:
+
+  If the /data/db volume already exists the init scripts won't run
+
+  Also need to mount the directory the script is in and not the script itself..
+
+
 MongoDB Change Streams require a replica set. According to MongoDB, a replica set in MongoDB is a group of mongod processes that maintain the same data set, providing redundancy and high availability.
 
 
@@ -67,22 +74,3 @@ dd if=/dev/zero of=filename bs=1 count=0 seek=200T
 
 * https://joelmccoy.medium.com/python-and-boto3-performance-adventures-synchronous-vs-asynchronous-aws-api-interaction-22f625ec6909
 
-
-
-### TODO
-* Fix mongodb init scripts not loading to create initial database?
-
-  If the /data/db volume already exists the init scripts won't run
-
-  Also need to mount the directory the script is in and not the script itself..
-
-* Multi upload with separate progress bars for each
-
-* CRUD for all uploads
-
-
-* Dockerzie the application
-
-* Add / use celery for the upload progress ?
-    https://celery.school/celery-progress-bars-with-fastapi-htmx
-    https://github.com/bstiel/celery-task-progress-bar

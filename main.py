@@ -1,4 +1,5 @@
 import shutil
+from datetime import datetime
 from pathlib import Path
 import logging
 from functools import partial
@@ -49,6 +50,13 @@ S3_PROFILE = get_settings().s3_profile
 S3_BUCKET = get_settings().s3_bucket
 SESSION = boto3.Session(region_name=S3_REGION, profile_name=S3_PROFILE)
 S3_CLIENT = SESSION.client("s3")
+
+
+validate_file = FileValidator(
+    max_size=5 * GB,
+    allowed_extensions={".appimage", ".file", ".jpg"},
+    allowed_content_types=ALLOWED_CONTENT_TYPES,
+)
 
 
 def generate_safe_filename(original: str) -> str:
@@ -117,23 +125,16 @@ app.add_middleware(
 )
 
 
-validate_file = FileValidator(
-    max_size=5 * GB,
-    allowed_extensions={".appimage", ".file", ".jpg"},
-    allowed_content_types=ALLOWED_CONTENT_TYPES,
-)
-
-
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    CLIENTS.add(websocket)
-
     await websocket.accept()
+    CLIENTS.add(websocket)
 
     try:
         while True:
             await websocket.receive_text()
-    except WebSocketDisconnect:
+    except WebSocketDisconnect as e:
+        logger.info(f"WS ERROR: {e}")
         logger.info("WS connection closed")
         CLIENTS.remove(websocket)
 
@@ -174,7 +175,9 @@ class ProgressPercentage:
                 {"_id": ObjectId(self._id)},
                 {
                     "$set": UpdateUploadSchema(
-                        current=self._seen_so_far, percentage=percentage
+                        current=self._seen_so_far,
+                        percentage=percentage,
+                        updated_at=datetime.now(),
                     ).model_dump(exclude_unset=True)
                 },
             )
@@ -206,7 +209,14 @@ def s3_upload(file: UploadFile, upload_id: str) -> S3UploadResponse:
 
     # Update record with s3 url
     nonasync_uploads.update_one(
-        {"_id": ObjectId(upload_id)}, {"$set": {"s3_url": file_url, "s3_key": filename}}
+        {"_id": ObjectId(upload_id)},
+        {
+            "$set": {
+                "s3_url": file_url,
+                "s3_key": filename,
+                "updated_at": datetime.now(),
+            }
+        },
     )
 
     return S3UploadResponse(s3_url=file_url, s3_key=filename)

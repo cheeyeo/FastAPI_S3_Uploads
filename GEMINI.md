@@ -5,12 +5,12 @@ This project is a FastAPI application designed to demonstrate robust file upload
 ## Technologies Used:
 *   **FastAPI**: For building the web API.
 *   **boto3**: AWS SDK for Python, used for S3 interactions.
-*   **aiofiles**: For asynchronous file operations.
 *   **pydantic-settings**: For managing application settings and environment variables.
 *   **python-dotenv**: For loading environment variables from a `.env` file.
 *   **uvicorn**: An ASGI server for running the FastAPI application.
 *   **React (with TypeScript)**: For the user interface (frontend).
 *   **Vite**: A fast build tool for the frontend.
+*   **mongodb**: For storing upload information.
 
 ## Architecture:
 The application exposes two main endpoints for file uploads:
@@ -24,15 +24,14 @@ The frontend is a React application located in the `frontend/` directory, which 
 ## Building and Running:
 
 ### 1. Backend Environment Setup (FastAPI):
-This project uses `pyenv` to manage Python versions and `uvicorn` to run the FastAPI application.
+This project uses `uv` to manage Python versions and `uvicorn` to run the FastAPI application.
 
-First, ensure you have `pyenv` installed. Then, set up the Python version and install dependencies:
+First, ensure you have `uv` installed. Then, create a virtual env and install dependencies:
 
 ```bash
-pyenv install
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[standard]"
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv venv
+uv sync --locked
 ```
 
 ### 2. Backend Configuration (FastAPI):
@@ -43,12 +42,21 @@ UPLOAD_DIR=uploads
 S3_REGION=your_aws_region
 S3_PROFILE=your_aws_cli_profile
 S3_BUCKET=your_s3_bucket_name
+MONGO_DB_ROOT_USERNAME=mongo_username
+MONGO_DB_ROOT_PASSWORD=mongo_root_password
+MONGO_DB_USER=mongo_db_user
+MONGO_DB_PASSWORD=mongo_db_password
 ```
 
 Replace `your_aws_region`, `your_aws_cli_profile`, and `your_s3_bucket_name` with your actual AWS details. Ensure your AWS CLI profile has the necessary permissions to upload to the specified S3 bucket.
 
 ### 3. Running the Backend (FastAPI):
-To start the FastAPI application using Uvicorn:
+In a separate terminal, start the mongodb replicaset using docker compose:
+```bash
+docker compose -f compose-multi.yml up
+```
+
+In another terminal window, start the FastAPI application using Uvicorn:
 
 ```bash
 uvicorn main:app --reload

@@ -1,5 +1,18 @@
-https://github.com/nicholasadamou/s3-large-file-uploader/tree/master/backend
+### TODO
 
+* Multiple uploads with separate progress bars for each
+
+* CRUD for all uploads
+
+* Dockerzie the application
+
+* Add / use celery for the upload progress ?
+    https://celery.school/celery-progress-bars-with-fastapi-htmx
+    https://github.com/bstiel/celery-task-progress-bar
+
+
+
+https://github.com/nicholasadamou/s3-large-file-uploader/tree/master/backend
 
 ```
 import boto3
