@@ -43,7 +43,12 @@ GB = 1024**3
 MAX_FILE_SIZE = 50 * CHUNK_SIZE
 # MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", 50 * 1024 * 1024))  # 50MB
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".pdf", ".doc", ".docx"}
-ALLOWED_CONTENT_TYPES = {"application/x-executable", "application/octet-stream"}
+ALLOWED_CONTENT_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "application/x-executable",
+    "application/octet-stream",
+}
 UPLOAD_DIR = Path(get_settings().upload_dir)
 S3_REGION = get_settings().s3_region
 S3_PROFILE = get_settings().s3_profile
@@ -54,7 +59,7 @@ S3_CLIENT = SESSION.client("s3")
 
 validate_file = FileValidator(
     max_size=5 * GB,
-    allowed_extensions={".appimage", ".file", ".jpg"},
+    allowed_extensions={".jpg", ".jpeg", ".png", ".gif", ".appimage", ".file", ".jpg"},
     allowed_content_types=ALLOWED_CONTENT_TYPES,
 )
 
@@ -81,6 +86,7 @@ async def watch_uploads_changes():
             }
         }
     ]
+    # call watch on the uploads collection; async_uploads ref the uploads collection
     async with await async_uploads.watch(
         pipeline, full_document="updateLookup", full_document_before_change="required"
     ) as stream:
@@ -133,9 +139,9 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             await websocket.receive_text()
-    except WebSocketDisconnect as e:
-        logger.info(f"WS ERROR: {e}")
-        logger.info("WS connection closed")
+    except WebSocketDisconnect:
+        # logger.info(f"WS ERROR: {e}")
+        # logger.info("WS connection closed")
         CLIENTS.remove(websocket)
 
 
@@ -183,7 +189,7 @@ class ProgressPercentage:
             )
 
 
-def s3_upload(file: UploadFile, upload_id: str) -> S3UploadResponse:
+def s3_upload(file: UploadFile, upload_id: str, background: False) -> S3UploadResponse:
     filename = generate_safe_filename(file.filename)
 
     try:
@@ -191,7 +197,6 @@ def s3_upload(file: UploadFile, upload_id: str) -> S3UploadResponse:
             multipart_chunksize=CHUNK_SIZE,
             multipart_threshold=5 * GB,
         )
-
         S3_CLIENT.upload_fileobj(
             Fileobj=file.file,
             Bucket=S3_BUCKET,
@@ -200,26 +205,39 @@ def s3_upload(file: UploadFile, upload_id: str) -> S3UploadResponse:
             Config=config,
             Callback=ProgressPercentage(file, upload_id),
         )
+
+        file_url = S3_CLIENT.generate_presigned_url(
+            "get_object", Params={"Bucket": S3_BUCKET, "Key": filename}, ExpiresIn=3600
+        )
+
+        # Update record with s3 url
+        nonasync_uploads.update_one(
+            {"_id": ObjectId(upload_id)},
+            {
+                "$set": {
+                    "status": "completed",
+                    "s3_url": file_url,
+                    "s3_key": filename,
+                    "updated_at": datetime.now(),
+                }
+            },
+        )
+
+        return S3UploadResponse(s3_url=file_url, s3_key=filename)
     except ClientError as e:
-        raise e
-
-    file_url = S3_CLIENT.generate_presigned_url(
-        "get_object", Params={"Bucket": S3_BUCKET, "Key": filename}, ExpiresIn=3600
-    )
-
-    # Update record with s3 url
-    nonasync_uploads.update_one(
-        {"_id": ObjectId(upload_id)},
-        {
-            "$set": {
-                "s3_url": file_url,
-                "s3_key": filename,
-                "updated_at": datetime.now(),
-            }
-        },
-    )
-
-    return S3UploadResponse(s3_url=file_url, s3_key=filename)
+        if background:
+            nonasync_uploads.update_one(
+                {"_id": ObjectId(upload_id)},
+                {
+                    "$set": {
+                        "status": "error",
+                        "exception": str(e),
+                        "updated_at": datetime.now(),
+                    }
+                },
+            )
+        else:
+            raise e
 
 
 @app.post("/upload/s3", response_model=UploadResponse)
@@ -260,7 +278,7 @@ async def upload_s3_background(
     )
 
     upload_id = str(result.inserted_id)
-    upload_partial = partial(s3_upload, file=file, upload_id=upload_id)
+    upload_partial = partial(s3_upload, file=file, upload_id=upload_id, background=True)
 
     #  Add task to background
     background_tasks.add_task(upload_partial)

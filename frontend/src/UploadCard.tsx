@@ -12,6 +12,7 @@ export type UploadCardProps = {
 const UploadCard = ({ uploadId, filename, initialProgress }: UploadCardProps) => {
   const [progress, setProgress] = useState<number>(initialProgress);
   const ws = useRef<WebSocket | null>(null);
+  const [message, setMessage] = useState<string>('');
 
   useEffect(() => {
     ws.current = new WebSocket(WS_URL);
@@ -20,7 +21,6 @@ const UploadCard = ({ uploadId, filename, initialProgress }: UploadCardProps) =>
       const ws2 = new WebSocket('ws://localhost:8001')
       ws.current = ws2
     }
-
 
     ws.current.onopen = () => {
       console.log(`WebSocket for ${filename} connected`);
@@ -31,15 +31,21 @@ const UploadCard = ({ uploadId, filename, initialProgress }: UploadCardProps) =>
     ws.current.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        console.log(data)
-        console.log(uploadId)
-        console.log(data.after.percentage)
+
+        // if error exists close WS and show error
+        if (data.event === 'update' && data.document_id === uploadId && data.after.status === 'error') {
+          console.log(data.after.exception);
+          setMessage(data.after.exception);
+          ws.current?.close()
+        }
+
         if (data.event === 'update' && data.document_id === uploadId && typeof data.after.percentage === 'number') {
           setProgress(data.after.percentage);
         }
 
         if (data.after.percentage === 100) {
           // close websocket after completion
+          setMessage(data.after.s3_key + '\n' + data.after.s3_url)
           ws.current?.close()
         }
 
@@ -71,6 +77,11 @@ const UploadCard = ({ uploadId, filename, initialProgress }: UploadCardProps) =>
         progress={progress} 
         progressText={progress > 0 ? `${Math.round(progress)}%` : 'Initializing...'} 
       />
+      <div>
+        <pre>
+          {message}
+        </pre>
+      </div>
     </div>
   );
 };

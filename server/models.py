@@ -13,6 +13,8 @@ class UploadSchema(BaseModel):
     current: int = Field(default=0)
     size: float = Field(...)
     percentage: float = Field(default=0.0)
+    status: str = Field(default="pending")
+    exception: Optional[str] = None
     s3_url: Optional[str] = None
     s3_key: Optional[str] = None
     created_at: datetime = datetime.now()

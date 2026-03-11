@@ -1,15 +1,17 @@
 ### TODO
 
-* Multiple uploads with separate progress bars for each
-
-* CRUD for all uploads
-
 * Dockerzie the application
+
+* Support multiple uploads in UI
+
+* Uploads to resume even with page refresh ; requires additional UI component and endpoint
 
 * Add / use celery for the upload progress ?
     https://celery.school/celery-progress-bars-with-fastapi-htmx
     https://github.com/bstiel/celery-task-progress-bar
 
+
+* CRUD for the uploads
 
 
 https://github.com/nicholasadamou/s3-large-file-uploader/tree/master/backend
@@ -40,4 +42,10 @@ parts.append({'ETag': etag, 'PartNumber': part}) #you have to append etag and pa
 #After completing for all parts, you will use complete_multipart_upload api which requires that parts list 
 res = s3.complete_multipart_upload(Bucket=bucket_name, Key=key, MultipartUpload={'Parts': parts},UploadId=upload_id)
 
+```
+
+To create ClientError in boto3 for testing:
+```
+        raise ClientError(operation_name="S3 PUT", error_response={
+            "Error": {"Message": "ERROR WITH S3 UPLOAD", "Code": "123"}})
 ```
