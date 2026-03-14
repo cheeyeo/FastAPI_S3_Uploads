@@ -89,6 +89,52 @@ services:
       ME_CONFIG_BASICAUTH_USERNAME: mongoexpressuser
       ME_CONFIG_BASICAUTH_PASSWORD: mongoexpresspass
 
+  
+  fastapiuploads:
+    build:
+      dockerfile: Dockerfile
+      context: .
+    image: fastapiuploads:latest
+    container_name: fastapiuploads
+    depends_on:
+        mongo-1:
+          condition: service_started
+          restart: true
+        mongo-2:
+          condition: service_started
+          restart: true
+        mongo-3:
+          condition: service_started
+          restart: true
+    env_file: .env
+    restart: always
+    networks: 
+      - "mynetwork"
+    ports:
+      - 8000:8000
+    secrets:
+      - source: aws
+        target: /home/appuser/.aws
+        uid: "1000"
+        gid: "1000"
+        mode: 0700
+    # NOTE: Below causes the mongo replicas to trash loop; maybe have to disconnect all clients first before restart?
+    # develop:
+    #   watch:
+    #     - action: rebuild
+    #       path: ./main.py
+    #       target: /app/main.py
+    #       ignore:
+    #         - __pycache__
+    #     - action: rebuild
+    #       path: uv.lock
+    #     - action: rebuild
+    #       path: pyproject.toml
+
+secrets:
+  aws:
+    file: "~/.aws"
+
 
 volumes:
   mongo1data:

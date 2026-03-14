@@ -2,6 +2,24 @@
 
 * Dockerzie the application
 
+  https://github.com/astral-sh/uv-docker-example/blob/main/multistage.Dockerfile
+
+
+
+* Apply spec driven development to the project:
+
+  https://github.blog/ai-and-ml/generative-ai/spec-driven-development-with-ai-get-started-with-a-new-open-source-toolkit/
+
+  https://github.com/github/spec-kit
+
+
+
+* Learn other approaches to S3 uploads:
+  
+  https://learning.oreilly.com/answers2/?questionId=cc528152-2348-44ff-b82b-0e6642a9a4bd
+
+
+
 * Support multiple uploads in UI
 
 * Uploads to resume even with page refresh ; requires additional UI component and endpoint

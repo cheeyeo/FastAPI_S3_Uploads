@@ -189,7 +189,9 @@ class ProgressPercentage:
             )
 
 
-def s3_upload(file: UploadFile, upload_id: str, background: False) -> S3UploadResponse:
+def s3_upload(
+    file: UploadFile, upload_id: str, background: bool = False
+) -> S3UploadResponse:
     filename = generate_safe_filename(file.filename)
 
     try:
@@ -251,7 +253,9 @@ async def upload_s3(file: UploadFile = Depends(validate_file)):
     )
     upload_id = str(result.inserted_id)
 
-    upload_partial = partial(s3_upload, file=file, upload_id=upload_id)
+    upload_partial = partial(
+        s3_upload, file=file, upload_id=upload_id, background=False
+    )
 
     try:
         s3_upload_resp = await asyncio.to_thread(upload_partial)
@@ -299,31 +303,24 @@ async def get_presigned_url(filename: str, content_type: str, size: str):
     """
 
     # Add initial record to db
-    result = await async_uploads.insert_one(
+    await async_uploads.insert_one(
         UploadSchema(filename=filename, size=float(size)).model_dump()
     )
-    upload_id = str(result.inserted_id)
 
     s3_filename = generate_safe_filename(filename)
 
     try:
-        presigned_post = S3_CLIENT.generate_presigned_post(
-            Bucket=S3_BUCKET,
-            Key=s3_filename,
-            Fields={"Content-Type": content_type},
-            Conditions=[
-                {"Content-Type": content_type},
-                ["content_length-range", 1, 100 * 1024 * 1024],
-            ],
+        url = S3_CLIENT.generate_presigned_url(
+            ClientMethod="put_object",
+            Params={
+                "Bucket": S3_BUCKET,
+                "Key": s3_filename,
+                "ContentType": content_type,  # Specify content type
+            },
             ExpiresIn=3600,
         )
 
-        return {
-            "upload_id": upload_id,
-            "url": presigned_post["url"],
-            "fields": presigned_post["fields"],
-            "key": s3_filename,
-        }
+        return url
     except ClientError as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to generate presigned URL: {e}"
