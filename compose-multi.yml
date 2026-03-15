@@ -1,0 +1,154 @@
+services:  
+  mongo-1:
+    env_file: .env
+    container_name: 'mongo1'
+    entrypoint: >
+      /bin/bash -c '
+      openssl rand -base64 756 > /data/keyfile.key &&
+      chmod 400 /data/keyfile.key &&
+      chown mongodb:mongodb /data/keyfile.key &&
+      /usr/local/bin/docker-entrypoint.sh mongod --replSet rs0 --keyFile /data/keyfile.key --bind_ip localhost,mongo1'
+    image: 'mongo:latest'
+    ports:
+      - 27017:27017
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_DB_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_DB_ROOT_PASSWORD}
+      - MONGO_INITDB_DATABASE=fastapiuploads
+      - MONGO_USER=${MONGO_DB_USER}
+      - MONGO_PASSWORD=${MONGO_DB_PASSWORD}
+    volumes:
+        - 'mongo1data:/data/db'
+        - 'mongo1config:/data/configdb'
+        - 'sharedconfig:/data'
+        - ./scripts/docker/mongo:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: mongosh
+        -u $${MONGO_INITDB_ROOT_USERNAME}
+        -p $${MONGO_INITDB_ROOT_PASSWORD}
+        --eval "db.runCommand("ping").ok" | mongosh --port 27017 --quiet
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - mynetwork
+    restart: unless-stopped
+
+  mongo-2:
+    container_name: "mongo2"
+    image: 'mongo:latest'
+    ports:
+        - 27018:27017
+    volumes:
+        - 'mongo2data:/data/db'
+        - 'mongo2config:/data/configdb'
+        - 'sharedconfig:/data'
+    command: ["--replSet", "rs0", "--bind_ip", "localhost,mongo2", "--port", "27017", "--keyFile", "/data/keyfile.key"]
+    networks: 
+      - mynetwork
+    restart: unless-stopped
+
+  mongo-3:
+    container_name: "mongo3"
+    image: 'mongo:latest'
+    ports:
+        - 27019:27017
+    volumes:
+        - 'mongo3data:/data/db'
+        - 'mongo3config:/data/configdb'
+        - 'sharedconfig:/data'
+    command: ["--replSet", "rs0", "--bind_ip", "localhost,mongo3", "--port", "27017", "--keyFile", "/data/keyfile.key"]
+    networks: 
+      - mynetwork
+    restart: unless-stopped
+  
+  mongo-setup:
+    image: mongo:latest
+    env_file: .env
+    depends_on:
+      - mongo-1
+      - mongo-2
+      - mongo-3
+    volumes:
+      - ./mongo-setup.sh:/mongo-setup.sh
+    entrypoint: ["bash", "/mongo-setup.sh"]
+    networks:
+      - mynetwork
+
+  mongo-express:
+    image: mongo-express
+    env_file: .env
+    restart: always
+    ports:
+      - 8081:8081
+    networks: 
+      - "mynetwork"
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://${MONGO_DB_ROOT_USERNAME}:${MONGO_DB_ROOT_PASSWORD}@mongo1:27017,mongo2:27017,mongo3:27017/?authSource=admin
+      ME_CONFIG_BASICAUTH_ENABLED: true
+      ME_CONFIG_BASICAUTH_USERNAME: mongoexpressuser
+      ME_CONFIG_BASICAUTH_PASSWORD: mongoexpresspass
+
+  
+  fastapiuploads:
+    build:
+      dockerfile: Dockerfile
+      context: .
+    image: fastapiuploads:latest
+    container_name: fastapiuploads
+    depends_on:
+        mongo-1:
+          condition: service_started
+          restart: true
+        mongo-2:
+          condition: service_started
+          restart: true
+        mongo-3:
+          condition: service_started
+          restart: true
+    env_file: .env
+    restart: always
+    networks: 
+      - "mynetwork"
+    ports:
+      - 8000:8000
+    secrets:
+      - source: aws
+        target: /home/appuser/.aws
+        uid: "1000"
+        gid: "1000"
+        mode: 0700
+    # NOTE: Below causes the mongo replicas to trash loop; maybe have to disconnect all clients first before restart?
+    develop:
+      watch:
+        - action: rebuild
+          path: ./main.py
+          target: /app/main.py
+          ignore:
+            - __pycache__
+        - action: rebuild
+          path: ./server
+          target: /app/server
+          ignore:
+            - __pycache__
+        - action: rebuild
+          path: uv.lock
+        - action: rebuild
+          path: pyproject.toml
+
+secrets:
+  aws:
+    file: "~/.aws"
+
+
+volumes:
+  mongo1data:
+  mongo1config:
+  mongo2data:
+  mongo2config:
+  mongo3data:
+  mongo3config:
+  sharedconfig:
+
+networks:
+  mynetwork:
