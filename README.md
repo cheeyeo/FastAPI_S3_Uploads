@@ -2,7 +2,11 @@
 
 Learning how to use FastAPI for file uploads to S3 which includes a ReactUI that shows realtime updates via websocket from the API
 
-The updates are provided via MongoDB changesets and can run locally in docker containers.
+The realtime updates are provided via MongoDB changesets and can run locally in docker containers.
+
+This is still a works in progress. Part of the codebase is generated using Gemini and is currently being refined.
+
+More attempts are underway to use spec driven development.
 
 
 

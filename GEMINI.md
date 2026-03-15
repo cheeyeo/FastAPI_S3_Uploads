@@ -11,11 +11,18 @@ This project is a FastAPI application designed to demonstrate robust file upload
 *   **React (with TypeScript)**: For the user interface (frontend).
 *   **Vite**: A fast build tool for the frontend.
 *   **mongodb**: For storing upload information.
+*   **docker**: For running the mongodb replicaset and the applications.
+*   **mongo-express**: Docker container running as a service to access the mongodb databases.
 
 ## Architecture:
 The application exposes two main endpoints for file uploads:
 1.  `/upload/local`: Handles uploads to a designated local directory (configured via `UPLOAD_DIR`).
 2.  `/upload/s3`: Manages uploads to an Amazon S3 bucket, utilizing `boto3`'s `TransferConfig` for efficient multipart uploads of potentially large files.
+3. `/upload/background`: Manages uploads to an Amazon S3 bucket, performing the upload in a FastAPI background task and utilizing `boto3`'s `TransferConfig` for efficient multipart uploads of potentially large files.
+4. `/upload/presigned-url`: Manages uploads to an Amazon S3 bucket by using `boto3` `generate_presigned_url` method to return a fully signed URL for direct upload to S3 bucket, bypassing the web app. This is to support large file uploads.
+5. `/upload/{id}`: GET action. To get details for an upload via the MongoDB database.
+6. `/upload/{id}`: PATCH action. To update the upload document record in the MongoDB database.
+7. `/upload/{id}`: DELETE action. To delete the upload document record in the MongoDB database and remove the uploaded file from the S3 Bucket.
 
 Configuration settings for S3 (region, profile, bucket name) and the local upload directory are managed through `config/config.py` and loaded from environment variables defined in a `.env` file.
 
@@ -24,7 +31,7 @@ The frontend is a React application located in the `frontend/` directory, which 
 ## Building and Running:
 
 ### 1. Backend Environment Setup (FastAPI):
-This project uses `uv` to manage Python versions and `uvicorn` to run the FastAPI application.
+This project uses `uv` to manage Python versions.
 
 First, ensure you have `uv` installed. Then, create a virtual env and install dependencies:
 
@@ -51,18 +58,14 @@ MONGO_DB_PASSWORD=mongo_db_password
 Replace `your_aws_region`, `your_aws_cli_profile`, and `your_s3_bucket_name` with your actual AWS details. Ensure your AWS CLI profile has the necessary permissions to upload to the specified S3 bucket.
 
 ### 3. Running the Backend (FastAPI):
-In a separate terminal, start the mongodb replicaset using docker compose:
+In a separate terminal, start the mongodb replicaset and application containers using docker compose:
 ```bash
 docker compose -f compose-multi.yml up
 ```
 
-In another terminal window, start the FastAPI application using Uvicorn:
+The application will be accessible at `http://localhost:8000`. The API documentation (Swagger UI) will be available at `http://localhost:8000/docs`.
 
-```bash
-uvicorn main:app --reload
-```
-
-The application will be accessible at `http://127.0.0.1:8000`. The API documentation (Swagger UI) will be available at `http://127.0.0.1:8000/docs`.
+The mongo-express UI will be accessible at `http://localhost:8001`.
 
 ### 4. Frontend Setup and Running (React):
 

@@ -2,6 +2,7 @@
 
 * CRUD for the uploads plus link the frontend js/css into set of static html files served from fastapi?
 
+* Tests for the backend
 
 * Apply spec driven development to the project:
 
