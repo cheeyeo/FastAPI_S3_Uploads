@@ -3,9 +3,7 @@ from pymongo import MongoClient
 from pymongo import AsyncMongoClient
 
 
-# Cannot contain IPs but only hostname so need to check /etc/hosts for mapping of mongodb container IP to hostname else it will fail name resolution
-# Connect to Root:
-# mongodb://sa:Password123@mongo1:27017,mongo2:27017,mongo3:27017/?authSource=admin
+# Cannot contain IPs but only hostname
 DATABASE_URL = f"mongodb://{get_settings().mongo_db_user}:{get_settings().mongo_db_password}@mongo1:27017,mongo2:27017,mongo3:27017/fastapiuploads"
 
 nonasync_client = MongoClient(DATABASE_URL)

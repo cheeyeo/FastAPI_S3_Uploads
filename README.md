@@ -75,3 +75,8 @@ dd if=/dev/zero of=filename bs=1 count=0 seek=200T
 * https://joelmccoy.medium.com/python-and-boto3-performance-adventures-synchronous-vs-asynchronous-aws-api-interaction-22f625ec6909
 
 https://betterstack.com/community/guides/scaling-python/error-handling-fastapi/#creating-custom-exceptions-in-fastapi
+
+
+#### S3 PRESIGNED URL UPLOAD
+
+https://docs.aws.amazon.com/AmazonS3/latest/userguide/PresignedUrlUploadObject.html

@@ -10,6 +10,7 @@ PyObjectId = Annotated[str, BeforeValidator(str)]
 class UploadSchema(BaseModel):
     id: Optional[PyObjectId] = Field(alias="_id", default=None)
     filename: str = Field(...)
+    content_type: str = Field(...)
     current: int = Field(default=0)
     size: float = Field(...)
     percentage: float = Field(default=0.0)
@@ -23,6 +24,17 @@ class UploadSchema(BaseModel):
         populate_by_name=True,
         arbitrary_types_allowed=True,
     )
+
+
+class UpdateUpload(BaseModel):
+    status: Optional[str] = None
+    percentage: Optional[float] = 0.0
+
+
+class PresignedUpload(BaseModel):
+    id: str
+    url: str
+    content_type: str
 
 
 class UpdateUploadSchema(BaseModel):

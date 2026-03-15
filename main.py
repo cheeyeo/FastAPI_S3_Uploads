@@ -16,6 +16,9 @@ from fastapi import (
     WebSocketDisconnect,
     Depends,
     BackgroundTasks,
+    Body,
+    Response,
+    status,
 )
 from fastapi.middleware.cors import CORSMiddleware
 import boto3
@@ -23,12 +26,19 @@ from boto3.s3.transfer import TransferConfig
 from botocore.exceptions import ClientError
 from bson import ObjectId
 from server.config import get_settings
-from server.database import nonasync_uploads, async_uploads
+from server.database import (
+    nonasync_uploads,
+    async_uploads,
+    nonasync_client,
+    async_client,
+)
 from server.models import (
     UploadSchema,
     UpdateUploadSchema,
     UploadResponse,
     S3UploadResponse,
+    UpdateUpload,
+    PresignedUpload,
 )
 from server.validator import FileValidator
 
@@ -112,6 +122,9 @@ async def lifespan(app: FastAPI):
     task = asyncio.create_task(watch_uploads_changes())
     yield
     task.cancel()
+    # close db clients on app exit
+    nonasync_client.close()
+    await async_client.close()
 
 
 app = FastAPI(
@@ -183,6 +196,7 @@ class ProgressPercentage:
                     "$set": UpdateUploadSchema(
                         current=self._seen_so_far,
                         percentage=percentage,
+                        status="in progress",
                         updated_at=datetime.now(),
                     ).model_dump(exclude_unset=True)
                 },
@@ -249,7 +263,11 @@ async def upload_s3(file: UploadFile = Depends(validate_file)):
 
     # Add initial record to db
     result = await async_uploads.insert_one(
-        UploadSchema(filename=file.filename, size=float(file.size)).model_dump()
+        UploadSchema(
+            filename=file.filename,
+            size=float(file.size),
+            content_type=file.content_type,
+        ).model_dump()
     )
     upload_id = str(result.inserted_id)
 
@@ -278,7 +296,11 @@ async def upload_s3_background(
 ):
     # Add initial record to db
     result = await async_uploads.insert_one(
-        UploadSchema(filename=file.filename, size=float(file.size)).model_dump()
+        UploadSchema(
+            filename=file.filename,
+            size=float(file.size),
+            content_type=file.content_type,
+        ).model_dump()
     )
 
     upload_id = str(result.inserted_id)
@@ -292,22 +314,27 @@ async def upload_s3_background(
     return new_upload
 
 
-@app.post("/upload/presigned-url")
-async def get_presigned_url(filename: str, content_type: str, size: str):
+@app.post("/upload/presigned-url", response_model=PresignedUpload)
+async def get_presigned_url(file: UploadFile = Depends(validate_file)):
     """
     Generates presigned url for large file uploads to S3
 
     * Get presigned url
-    * PUT file directly to presigned url
-    * Notify server upload is complete
+    * PUT file directly to presigned url. Need to include content_type as Header else upload will fail
+    * Notify server upload is complete via /upload/:id PUT
     """
 
-    # Add initial record to db
-    await async_uploads.insert_one(
-        UploadSchema(filename=filename, size=float(size)).model_dump()
-    )
+    s3_filename = generate_safe_filename(file.filename)
 
-    s3_filename = generate_safe_filename(filename)
+    # Add initial record to db
+    resp = await async_uploads.insert_one(
+        UploadSchema(
+            filename=file.filename,
+            s3_key=s3_filename,
+            size=float(file.size),
+            content_type=file.content_type,
+        ).model_dump()
+    )
 
     try:
         url = S3_CLIENT.generate_presigned_url(
@@ -315,13 +342,77 @@ async def get_presigned_url(filename: str, content_type: str, size: str):
             Params={
                 "Bucket": S3_BUCKET,
                 "Key": s3_filename,
-                "ContentType": content_type,  # Specify content type
+                "ContentType": file.content_type,  # Specify content type
             },
             ExpiresIn=3600,
         )
 
-        return url
+        return {
+            "id": str(resp.inserted_id),
+            "url": url,
+            "content_type": file.content_type,
+        }
     except ClientError as e:
+        logger.error(e, exc_info=True)
         raise HTTPException(
             status_code=500, detail=f"Failed to generate presigned URL: {e}"
         )
+
+
+@app.get("/upload/{id}", response_model=UploadSchema)
+async def get_upload(id: str):
+    upload = await async_uploads.find_one({"_id": ObjectId(id)})
+
+    if upload is None:
+        raise HTTPException(status_code=400, detail=f"Upload with id {id} not found")
+
+    return upload
+
+
+@app.patch("/upload/{id}", response_model=UploadSchema)
+async def update_upload(id: str, upload: UpdateUpload = Body(...)):
+    record = await async_uploads.find_one({"_id": ObjectId(id)})
+    if record is None:
+        raise HTTPException(status_code=400, detail=f"Upload with id {id} not found")
+
+    upload_items = {k: v for k, v in upload.model_dump().items() if v is not None}
+    upload_items["updated_at"] = datetime.now()
+
+    update_result = await async_uploads.update_one(
+        {"_id": ObjectId(id)},
+        {"$set": upload_items},
+    )
+
+    if update_result.modified_count == 0:
+        raise HTTPException(status_code=400, detail=f"Upload with id {id} not updated.")
+
+    existing_upload = await async_uploads.find_one({"_id": ObjectId(id)})
+    if existing_upload is None:
+        raise HTTPException(status_code=400, detail=f"Upload with id {id} not found")
+
+    return existing_upload
+
+
+@app.delete("/upload/{id}")
+async def delete_upload(id: str, response: Response):
+    upload_doc = await async_uploads.find_one({"_id": ObjectId(id)})
+    if upload_doc is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, details=f"Upload {id} not found"
+        )
+
+    try:
+        S3_CLIENT.delete_object(Bucket=S3_BUCKET, Key=upload_doc["s3_key"])
+    except ClientError as e:
+        logger.error(e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to delete upload: {e}")
+
+    deleted_result = await async_uploads.delete_one({"_id": ObjectId(id)})
+    if deleted_result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Upload${id} not found"
+        )
+
+    if deleted_result.deleted_count == 1:
+        response.status_code = status.HTTP_204_NO_CONTENT
+        return response
