@@ -105,8 +105,6 @@ async def watch_uploads_changes():
             before = change.get("fullDocumentBeforeChange", {})
             after = change.get("fullDocument", {})
 
-            # logger.info(f"BEFORE: {before} AFTER: {after}")
-
             await broadcast(
                 {
                     "event": change["operationType"],
